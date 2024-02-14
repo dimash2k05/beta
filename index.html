@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.1.umd.min.js"type="application/javascript"></script>
+</head>
+<body>
+    <h1> Login with Metamask </h1>
+    <button onclick="signMessage()">Login using Metamask</button>
+    <p id="p1">  </p>
+
+    <script>
+        async function getNonce() {
+            const response = await fetch('/nonce');
+            const data = await response.json();
+            return data.nonce;
+        }
+
+        async function signMessage() {
+            console.log("Holy2");
+            var element = document.getElementById("p1");
+            const stored = window.localStorage.getItem("token"); 
+
+            if (stored != null) {
+                let token = window.localStorage.getItem("token");
+                const response = await fetch('/verify', {
+                    method: 'POST',
+                    headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                    },
+                });
+
+                let newResponse = await response.json();
+                console.log(newResponse);
+                if (newResponse == "OK") {
+                    window.location.href = '/success';
+                }
+                else {
+                    window.localStorage.removeItem("token");
+                    element.innerHTML = "Token has been expired, Please log in again with Metamask";
+                }
+            }
+            
+            else {
+                const nonce = await getNonce();
+                
+                const provider = new ethers.providers.Web3Provider(window.ethereum);
+                const signer = provider.getSigner();
+                const address = await signer.getAddress();
+                const message = `This nonce is signed using metamask ${nonce}`;
+                
+                const signedMessage = await signer.signMessage(message);
+                
+                const data = {signedMessage, message, address};
+
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                })
+
+                let token = await response.json();
+                window.localStorage.setItem("token", token);
+                const newResponse = await fetch('/verify', {
+                    method: 'POST',
+                    headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                    },
+                });
+                let answer = await newResponse.json();
+                console.log("answer");
+                if (answer == "OK") {
+                    window.location.href = '/success';
+                }
+                else {
+                    window.localStorage.removeItem("token");
+                    element.innerHTML = "Token has been expired, Please log in again with Metamask";
+                }
+            }
+        }
+    </script>
+</body>
+</html>
