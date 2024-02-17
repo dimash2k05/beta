@@ -1,65 +1,105 @@
 const express = require('express');
-const crypto = require('crypto');
-const ethers = require('ethers');
-const app = express();
-const path = require('path');
+const { Pool } = require('pg');
 const bodyParser = require('body-parser');
-const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+const session = require('express-session');
+const path = require('path');
 
-app.use(express.static(__dirname));
-app.use(express.json());
+const app = express();
+const port = 3000;
+
+const pool = new Pool({
+  user: 'postgres', 
+  host: 'localhost',
+  database: 'postgres',
+  password: '12345',
+  port: 5432,
+});
+
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-const secretKey = 'Thisismysecretkey';
+app.use(session({
+    secret: "Secret_key",
+    resave: false, 
+    saveUninitialized: false
+}));
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname + '/index.html'));
-})
+const templates = path.join(__dirname, 'templates');
 
-app.post('/login', (req, res) => {
-    const {signedMessage, message, address} = req.body;
-    const recoveredAddress = ethers.utils.verifyMessage(message, signedMessage);
-    
-    console.log(req.body);
+app.get('/sign-up', (req, res) => {
+  if(req.session.user){
+    res.redirect('/dashboard');
+    return;
+  }
+  res.sendFile(path.join(templates + '/registration.html'));
+});
 
-    if (recoveredAddress != address) {
-        return res.status(401).json({error: 'Invalid Signature'});
+app.get('/dashboard', (req, res) => {
+  res.sendFile(path.join(templates+ '/dashboard.html'));
+});
+
+app.post('/sign-up', async (req, res) => {
+  if(req.session.user){
+    res.redirect('/dashboard');
+    return;
+  }
+  const {username, email, password} = req.body;
+  const hashedPassword = await bcrypt.hash(password, 10);
+  // res.json({username : req.body.username, password : hashedPassword});
+  const query = 'INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING *';
+  const values = [username, email, hashedPassword];
+  try{
+    const result = await pool.query(query, values);
+    req.session.user = result.rows[0];
+    res.redirect('/dashboard/')
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error registering user');
+  }
+});
+
+app.get('/login', (req, res) => {
+  if(req.session.user){
+    res.redirect('/dashboard');
+  }
+  res.sendFile(path.join(templates+ '/login.html'));
+});
+
+app.post('/login', async (req, res) => {
+  if(req.session.user){
+    res.redirect('/dashboard');
+    return;
+  }
+  const { username, password } = req.body;
+  // if (!username || !password) {
+  //   return res.status(400).json({
+  //     message: "You have to fill in both fields"
+  //   });
+  // }
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    if (result.rows.length > 0) {
+      const storedHashedPassword = result.rows[0].password;
+      const check = await bcrypt.compare(password, storedHashedPassword);
+      if (check) {
+        req.session.user=result.rows[0];
+        res.redirect('/dashboard');
+        //res.status(200).json({message:"correct"});
+        //res.json(result.rows[0]);
+      } else {
+        //res.status(401).send("Incorrect password");
+        res.status(401).json({message:"Incorrect"});
+      }
+    } else {
+      res.status(401).send("No user found with the provided username");
     }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Error occurred while processing the request");
+  }
+});
 
-    const token = jwt.sign({address}, secretKey, {expiresIn : '10s'});
-    res.json(token);
-})
-
-app.post('/verify', (req, res) => {
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({error: 'Invalid Token'});
-    }
-
-    const token = authHeader.split(' ')[1];
-
-    const decoded = jwt.verify(token, secretKey);
-    console.log(decoded);
-
-    const currenTime = Math.floor(Date.now() / 1000);
-    if (decoded.exp < currenTime) {
-        res.json("token Expired");
-    } 
-    else {
-        res.json("OK");
-    }
-})
-
-app.get('/success', (req, res) => {
-    res.sendFile(path.join(__dirname + '/success.html'));
-})
-
-app.get('/nonce', (req, res) => {
-    const nonce = crypto.randomBytes(32).toString('hex');
-    res.json({nonce});
-})
-
-app.listen(3000, () => {
-    console.log('Server started on port 3000');
-})
+app.listen(port, () => {
+  console.log(`Server is running on http://localhost:${port}`);
+});

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>dApp</title>
+</head>
+
+<body>
+    <h1>Dashboard</h1>
+    <div>
+        <p id="address"></p>
+        <p id="balance"></p>
+        <p id="chainId"></p>
+        <button onclick="authorizeMetamask()">Authorize Metamask</button>
+    </div>
+
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js" type="application/javascript"></script>
+
+    <script>
+        async function authorizeMetamask() {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    // Request user authorization
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    const userAddress = accounts[0]; // User's Ethereum address
+
+                    // Display user's Ethereum address
+                    document.getElementById("address").innerText = "Authorized user: " + userAddress;
+
+                    // Display user's balance
+                    displayBalance(userAddress);
+
+                    // Display chain ID
+                    displayChainId();
+                } catch (error) {
+                    console.error("Authorization error:", error);
+                }
+            } else {
+                // Metamask is not installed
+                console.error("Metamask is not installed");
+            }
+        }
+
+        async function displayBalance(account) {
+            const provider = new ethers.providers.Web3Provider(window.ethereum);
+            try {
+                const balance = await provider.getBalance(account);
+                const formattedBalance = ethers.utils.formatEther(balance); // Convert balance from Wei to Ether
+                document.getElementById("balance").innerText = "Balance: " + formattedBalance + " ETH";
+            } catch (error) {
+                console.error("Error fetching balance:", error);
+                document.getElementById("balance").innerText = "Error fetching balance";
+            }
+        }
+
+        async function displayChainId() {
+            const provider = new ethers.providers.Web3Provider(window.ethereum);
+            try {
+                const network = await provider.getNetwork();
+                document.getElementById("chainId").innerText = "Chain ID: " + network.chainId;
+            } catch (error) {
+                console.error("Error fetching chain ID:", error);
+                document.getElementById("chainId").innerText = "Error fetching chain ID";
+            }
+        }
+    </script>
+</body>
+</html>
